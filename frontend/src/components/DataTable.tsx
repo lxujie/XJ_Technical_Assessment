@@ -17,21 +17,22 @@ export default function DataTable({ refreshTrigger }: { refreshTrigger: number }
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  // NEW: Add a loading state
+  const [isLoading, setIsLoading] = useState(false);
   const limit = 10;
 
-  // Wait 500ms after the user stops typing before setting the actual search term
   const debouncedSearch = useDebounce(search, 500);
 
   useEffect(() => {
     fetchData();
   }, [page, debouncedSearch, refreshTrigger]);
 
-  // Reset to page 1 when search term changes
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
 
   const fetchData = async () => {
+    setIsLoading(true); // Start loading
     try {
       const res = await axios.get(`${API_URL}/data`, {
         params: { page, limit, search: debouncedSearch }
@@ -40,6 +41,8 @@ export default function DataTable({ refreshTrigger }: { refreshTrigger: number }
       setTotal(res.data.total);
     } catch (error) {
       console.error("Error fetching data", error);
+    } finally {
+      setIsLoading(false); // Stop loading regardless of success or failure
     }
   };
 
@@ -66,7 +69,9 @@ export default function DataTable({ refreshTrigger }: { refreshTrigger: number }
           </tr>
         </thead>
         <tbody>
-          {data.length > 0 ? data.map((row) => (
+          {isLoading ? (
+            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>Loading data...</td></tr>
+          ) : data.length > 0 ? data.map((row) => (
             <tr key={row.id} style={{ borderBottom: '1px solid #eee' }}>
               <td>{row.id}</td>
               <td>{row.post_id}</td>
@@ -75,15 +80,15 @@ export default function DataTable({ refreshTrigger }: { refreshTrigger: number }
               <td>{row.body}</td>
             </tr>
           )) : (
-            <tr><td colSpan={5}>No data found.</td></tr>
+            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>No data found.</td></tr>
           )}
         </tbody>
       </table>
 
       <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between' }}>
-        <button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
+        <button disabled={page === 1 || isLoading} onClick={() => setPage(page - 1)}>Previous</button>
         <span>Page {page} of {totalPages || 1} (Total: {total})</span>
-        <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+        <button disabled={page >= totalPages || isLoading} onClick={() => setPage(page + 1)}>Next</button>
       </div>
     </div>
   );

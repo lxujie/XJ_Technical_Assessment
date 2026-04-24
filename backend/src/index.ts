@@ -78,7 +78,8 @@ io.on('connection', (socket) => {
 // 1. Pagination & Search Endpoint
 app.get('/data', async (req, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
+    const rawPage = parseInt(req.query.page as string);
+    const page = rawPage > 0 ? rawPage : 1; // Forces negative numbers and 0 to become page 1
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
     const search = req.query.search ? `%${req.query.search}%` : '%';

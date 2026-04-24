@@ -12,7 +12,7 @@ export default function ConflictModal({ existingData, incomingData, onResolve }:
   return (
     <div style={modalOverlayStyle}>
       <div style={modalContentStyle}>
-        <h2 style={{ color: '#d9534f' }}>⚠️ Data Conflict Detected</h2>
+        <h2 style={{ color: '#d9534f' }}> Data Conflict Detected</h2>
         <p>Another user or previous upload contains data with the same IDs. Please choose how to resolve this.</p>
 
         <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '20px' }}>
