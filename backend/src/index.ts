@@ -143,15 +143,20 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
       try {
         // Extract all IDs from the incoming CSV
-        const incomingIds = incomingData.map(row => parseInt(row.id));
+        const incomingIds = incomingData
+          .map(row => parseInt(row.id))
+          .filter(id => !isNaN(id));
 
-        // Check for existing IDs in the database
-        const conflictCheckResult = await pool.query(
-          'SELECT * FROM data_db WHERE id = ANY($1)',
-          [incomingIds]
-        );
+        let existingRecords: any[] = [];
 
-        const existingRecords = conflictCheckResult.rows;
+        // Only query the database for conflicts if we actually have valid IDs
+        if (incomingIds.length > 0) {
+          const conflictCheckResult = await pool.query(
+            'SELECT * FROM data_db WHERE id = ANY($1)',
+            [incomingIds]
+          );
+          existingRecords = conflictCheckResult.rows;
+        }
 
         // CONFLICT DETECTION LOGIC:
         // Filter the incoming data to find rows where the data changed
@@ -239,6 +244,11 @@ app.post('/upload', upload.single('file'), (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Backend API running on port ${PORT}`);
-});
+
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Backend API running on port ${PORT}`);
+  });
+}
+
+export { app, pool };

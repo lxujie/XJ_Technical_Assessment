@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "start": "ts-node src/index.ts",
-    "dev": "nodemon src/index.ts"
+    "dev": "nodemon src/index.ts",
+    "test": "jest"
   },
   "dependencies": {
     "cors": "^2.8.5",
