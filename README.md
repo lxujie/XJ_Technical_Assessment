@@ -33,7 +33,7 @@ In your submission, must include the following:
 
 5. Provide a readme in the git repository on how to setup and run the project.  
 
-# Other notes
+## Other notes
 
 - You will be expected to run and demo your application running the docker compose file during the interview.
 - During the demo, two browser tabs/windows should be opened and you will be required to perform the conflicting uploads simultaneously. You must explain every design decision in their conflict resolution strategy.
