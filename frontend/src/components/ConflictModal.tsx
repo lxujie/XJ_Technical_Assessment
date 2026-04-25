@@ -7,44 +7,82 @@ interface ConflictModalProps {
 }
 
 export default function ConflictModal({ existingData, incomingData, onResolve }: ConflictModalProps) {
-  if (!existingData.length) return null;
+    if (!existingData.length) return null;
 
-  return (
-    <div style={modalOverlayStyle}>
-      <div style={modalContentStyle}>
-        <h2 style={{ color: '#d9534f' }}> Data Conflict Detected</h2>
-        <p>Another user or previous upload contains data with the same IDs. Please choose how to resolve this.</p>
+    const fields = ['id', 'post_id', 'name', 'email', 'body'];
 
-        <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '20px' }}>
+    return (
+    <div style={modalOverlayStyle} onClick={() => onResolve('keep_existing')}>
+      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ color: '#d9534f', marginTop: 0 }}>Data Conflict Detected</h2>
+        <p style={{ color: '#555', marginBottom: '20px' }}>
+          Another user or previous upload contains data with the same IDs. Please review the changes below and choose how to resolve this.
+        </p>
+
+        <div style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '10px', marginBottom: '20px' }}>
           {incomingData.map((newRow) => {
-            const oldRow = existingData.find(ex => ex.id === parseInt(newRow.id));
+            // Safely find the old row, matching on string just in case of type mismatches
+            const oldRow = existingData.find(ex => String(ex.id) === String(newRow.id));
+            
             return (
-              <div key={newRow.id} style={{ border: '1px solid #ccc', margin: '10px 0', padding: '10px' }}>
-                <h4>Row ID: {newRow.id}</h4>
-                <div style={{ display: 'flex', gap: '20px' }}>
-                  <div style={{ flex: 1, backgroundColor: '#f9f9f9', padding: '10px' }}>
-                    <strong>Current Database Version:</strong>
-                    <pre>{JSON.stringify(oldRow, null, 2)}</pre>
+              <div key={newRow.id} style={rowContainerStyle}>
+                <h4 style={{ margin: '0 0 15px 0', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
+                  Row ID: {newRow.id}
+                </h4>
+                
+                <div style={{ display: 'flex', gap: '2px', backgroundColor: '#ddd', border: '1px solid #ddd' }}>
+                  
+                  {/* Left Column: Current DB */}
+                  <div style={{ flex: 1, backgroundColor: '#fdfdfd', padding: '15px' }}>
+                    <div style={columnHeaderStyle}>Current Database Version</div>
+                    {fields.map(field => (
+                      <div key={`old-${field}`} style={fieldStyle}>
+                        <span style={labelStyle}>{field}:</span>
+                        <span>{oldRow ? oldRow[field] : 'N/A'}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ flex: 1, backgroundColor: '#eefcf5', padding: '10px' }}>
-                    <strong>Incoming CSV Version:</strong>
-                    <pre>{JSON.stringify(newRow, null, 2)}</pre>
+
+                  {/* Right Column: Incoming CSV */}
+                  <div style={{ flex: 1, backgroundColor: '#fffafb', padding: '15px' }}>
+                    <div style={columnHeaderStyle}>Incoming CSV Version</div>
+                    {fields.map(field => {
+                      const oldVal = oldRow ? String(oldRow[field]) : '';
+                      const newVal = String(newRow[field]);
+                      const isDifferent = oldVal !== newVal;
+
+                      return (
+                        <div key={`new-${field}`} style={fieldStyle}>
+                          <span style={labelStyle}>{field}:</span>
+                          <span style={{ 
+                            color: isDifferent ? '#d9534f' : 'inherit', 
+                            fontWeight: isDifferent ? 'bold' : 'normal',
+                            backgroundColor: isDifferent ? '#fdeced' : 'transparent',
+                            padding: isDifferent ? '2px 4px' : '0',
+                            borderRadius: '3px'
+                          }}>
+                            {newRow[field] || 'N/A'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
+
                 </div>
               </div>
             );
           })}
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', borderTop: '1px solid #eee', paddingTop: '20px' }}>
           <button 
             onClick={() => onResolve('keep_existing')}
-            style={{ padding: '10px', backgroundColor: '#6c757d', color: 'white' }}>
+            style={btnSecondaryStyle}>
             Keep Existing Data
           </button>
           <button 
             onClick={() => onResolve('overwrite')}
-            style={{ padding: '10px', backgroundColor: '#007bff', color: 'white' }}>
+            style={btnPrimaryStyle}>
             Overwrite with New CSV
           </button>
         </div>
@@ -53,13 +91,61 @@ export default function ConflictModal({ existingData, incomingData, onResolve }:
   );
 }
 
+// --- Styles ---
+
 const modalOverlayStyle: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-  backgroundColor: 'rgba(0,0,0,0.7)',
-  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+  backgroundColor: 'rgba(0,0,0,0.6)',
+  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000,
+  backdropFilter: 'blur(3px)' // Adds a nice modern blur to the background
 };
 
 const modalContentStyle: React.CSSProperties = {
-  backgroundColor: 'white', padding: '30px', borderRadius: '8px',
-  width: '80%', maxWidth: '900px'
+  backgroundColor: '#fff', padding: '30px', borderRadius: '12px',
+  width: '90%', maxWidth: '1000px',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+  display: 'flex', flexDirection: 'column'
+};
+
+const rowContainerStyle: React.CSSProperties = {
+  border: '1px solid #e0e0e0', 
+  borderRadius: '8px', 
+  marginBottom: '20px', 
+  padding: '15px',
+  backgroundColor: '#fafafa'
+};
+
+const columnHeaderStyle: React.CSSProperties = {
+  fontWeight: 'bold', 
+  fontSize: '14px', 
+  textTransform: 'uppercase', 
+  color: '#666',
+  marginBottom: '15px',
+  letterSpacing: '0.5px'
+};
+
+const fieldStyle: React.CSSProperties = {
+  marginBottom: '10px',
+  fontSize: '14px',
+  lineHeight: '1.5',
+  wordBreak: 'break-word'
+};
+
+const labelStyle: React.CSSProperties = {
+  fontWeight: 600,
+  display: 'inline-block',
+  width: '70px',
+  color: '#444'
+};
+
+const btnPrimaryStyle: React.CSSProperties = {
+  padding: '12px 20px', backgroundColor: '#d9534f', color: 'white', 
+  border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
+  transition: 'background-color 0.2s'
+};
+
+const btnSecondaryStyle: React.CSSProperties = {
+  padding: '12px 20px', backgroundColor: '#e2e6ea', color: '#333', 
+  border: '1px solid #dae0e5', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
+  transition: 'background-color 0.2s'
 };

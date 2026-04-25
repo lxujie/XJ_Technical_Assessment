@@ -10,15 +10,15 @@ const socket = io(API_URL);
 export default function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [conflictState, setConflictState] = useState<{ existing: any[], incoming: any[] } | null>(null);
-  
   const [socketId, setSocketId] = useState<string>('');
+  
+  const [resetUploadTrigger, setResetUploadTrigger] = useState(0);
 
   useEffect(() => {
     socket.on('connect', () => {
       if (socket.id) setSocketId(socket.id);
     });
 
-    // Listen for conflicts triggered by our own upload
     socket.on('conflict_detected', (payload) => {
       setConflictState({
         existing: payload.existingData,
@@ -26,7 +26,6 @@ export default function App() {
       });
     });
 
-    // Listen for global data updates
     socket.on('data_updated', () => {
       setRefreshTrigger(prev => prev + 1);
     });
@@ -51,13 +50,19 @@ export default function App() {
     });
 
     setConflictState(null);
+    setResetUploadTrigger(prev => prev + 1); 
   };
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1>Real-Time CSV Data Manager</h1>
+      <h1>Real-Time Data Manager</h1>
       
-      <Upload onUploadSuccess={handleUploadSuccess} socketId={socketId} />
+      <Upload 
+        onUploadSuccess={handleUploadSuccess} 
+        socketId={socketId} 
+        resetTrigger={resetUploadTrigger} 
+      />
+      
       <DataTable refreshTrigger={refreshTrigger} />
 
       {conflictState && (

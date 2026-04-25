@@ -1,12 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export default function Upload({ onUploadSuccess, socketId }: { onUploadSuccess: () => void, socketId: string }) {
+export default function Upload({ onUploadSuccess, socketId, resetTrigger }: { onUploadSuccess: () => void, socketId: string, resetTrigger: number }) {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<number>(0);
   const [status, setStatus] = useState<string>('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (resetTrigger > 0) {
+      setFile(null);
+      setProgress(0);
+      setStatus('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''; // Visually clears the input field
+      }
+    }
+  }, [resetTrigger]);
 
   const handleUpload = async () => {
     if (!file) return;
@@ -14,7 +27,6 @@ export default function Upload({ onUploadSuccess, socketId }: { onUploadSuccess:
     const formData = new FormData();
     formData.append('file', file);
     
-    // NEW: Attach the user's socket ID to the upload request
     if (socketId) {
       formData.append('socketId', socketId);
     }
@@ -38,6 +50,7 @@ export default function Upload({ onUploadSuccess, socketId }: { onUploadSuccess:
         setStatus('Upload successful!');
         setProgress(0);
         setFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         onUploadSuccess(); 
       }
     } catch (error) {
@@ -53,6 +66,7 @@ export default function Upload({ onUploadSuccess, socketId }: { onUploadSuccess:
       <input 
         type="file" 
         accept=".csv" 
+        ref={fileInputRef} 
         onChange={(e) => setFile(e.target.files?.[0] || null)} 
       />
       <button onClick={handleUpload} disabled={!file || progress > 0}>
@@ -64,7 +78,9 @@ export default function Upload({ onUploadSuccess, socketId }: { onUploadSuccess:
           <progress value={progress} max="100" /> {progress}%
         </div>
       )}
-      {status && <p>{status}</p>}
+      {status && <p style={{ marginTop: '10px', color: status.includes('failed') || status.includes('Conflict') ? '#d9534f' : '#28a745' }}>
+        {status}
+      </p>}
     </div>
   );
 }
