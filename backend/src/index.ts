@@ -33,7 +33,7 @@ const upload = multer({ dest: 'uploads/' });
 // --- WEBSOCKET CONNECTION ---
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
-  socket.join('dashboard'); // Put all users in a common room for this assessment
+  socket.join('dashboard'); 
 
   // Listen for the frontend's resolution decision
   socket.on('resolve_conflict', async (payload) => {
@@ -52,13 +52,10 @@ io.on('connection', (socket) => {
               body = EXCLUDED.body;
         `;
         
-        // Execute the upsert for each conflicting row (using mapped 'post_id')
         for (const row of incomingData) {
           await pool.query(query, [row.id, row.post_id, row.name, row.email, row.body]); 
         }
       }
-      
-      // If resolution is 'keep_existing', we simply do nothing and drop the incoming data.
 
       // Broadcast to ALL connected clients that the data has changed
       io.to('dashboard').emit('data_updated');
@@ -84,7 +81,6 @@ app.get('/data', async (req, res) => {
     const offset = (page - 1) * limit;
     const search = req.query.search ? `%${req.query.search}%` : '%';
 
-    // Query with ILIKE for case-insensitive search across multiple columns
     const dataQuery = `
       SELECT * FROM data_db 
       WHERE name ILIKE $1 OR email ILIKE $1 OR body ILIKE $1 
@@ -126,13 +122,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
     .pipe(csv({
       mapHeaders: ({ header }) => {
         const cleanHeader = header.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        
-        // Now we safely map it to the exact database column name
-        if (cleanHeader === 'postid') {
-          return 'post_id';
-        }
-        
-        // Return other headers safely (id, name, email, body)
+        if (cleanHeader === 'postid') return 'post_id';
         return cleanHeader;
       }
     }))
@@ -142,14 +132,13 @@ app.post('/upload', upload.single('file'), (req, res) => {
       fs.unlinkSync(req.file!.path);
 
       try {
-        // Extract all IDs from the incoming CSV
+        // Extract all IDs from the incoming CSV, filtering out invalid/NaN values
         const incomingIds = incomingData
           .map(row => parseInt(row.id))
           .filter(id => !isNaN(id));
 
         let existingRecords: any[] = [];
 
-        // Only query the database for conflicts if we actually have valid IDs
         if (incomingIds.length > 0) {
           const conflictCheckResult = await pool.query(
             'SELECT * FROM data_db WHERE id = ANY($1)',
@@ -158,53 +147,24 @@ app.post('/upload', upload.single('file'), (req, res) => {
           existingRecords = conflictCheckResult.rows;
         }
 
-        // CONFLICT DETECTION LOGIC:
-        // Filter the incoming data to find rows where the data changed
+        // --- SMART CONFLICT DETECTION LOGIC ---
         const trueConflicts = incomingData.filter(incomingRow => {
           const existingRow = existingRecords.find(ex => ex.id == incomingRow.id);
-          
-          // If the ID doesn't exist in DB at all means its a new record, not a conflict
           if (!existingRow) return false; 
 
-          // Compare the values. (Using != for post_id because CSV is string, DB is int)
-          const isDifferent = 
-            existingRow.post_id != incomingRow.post_id ||
-            existingRow.name !== incomingRow.name ||
-            existingRow.email !== incomingRow.email ||
-            existingRow.body !== incomingRow.body;
-
-          return isDifferent;
+          return existingRow.post_id != incomingRow.post_id ||
+                 existingRow.name !== incomingRow.name ||
+                 existingRow.email !== incomingRow.email ||
+                 existingRow.body !== incomingRow.body;
         });
 
-        if (trueConflicts.length > 0) {
-          console.log(`Detected ${trueConflicts.length} data conflicts.`);
+        // Separate out rows that are completely new or completely identical
+        const cleanRows = incomingData.filter(row => !trueConflicts.some(tc => tc.id === row.id));
 
-          const uploaderSocketId = req.body.socketId;
-
-          //Emit only to the user who uploaded the file
-          if (uploaderSocketId) {
-            io.to(uploaderSocketId).emit('conflict_detected', {
-              existingData: existingRecords.filter(ex => trueConflicts.some(tc => tc.id == ex.id)),
-              incomingData: trueConflicts
-            });
-          } else {
-            // Fallback just in case socketId wasn't passed
-            io.to('dashboard').emit('conflict_detected', {
-              existingData: existingRecords.filter(ex => trueConflicts.some(tc => tc.id == ex.id)),
-              incomingData: trueConflicts
-            });
-          }
-
-          return res.status(202).json({ 
-            status: 'conflict', 
-            message: 'Conflicts detected. Awaiting user resolution.' 
-          });
-        }
-        
-        // If NO conflicts, we insert everything safely using a Transaction
+        // 1. Insert ALL clean rows immediately
         const client = await pool.connect();
         try {
-          await client.query('BEGIN'); // Start transaction
+          await client.query('BEGIN'); 
           
           const insertQuery = `
             INSERT INTO data_db (id, post_id, name, email, body) 
@@ -216,25 +176,51 @@ app.post('/upload', upload.single('file'), (req, res) => {
                 body = EXCLUDED.body;
           `;
 
-          for (const row of incomingData) {
-            // Using mapped 'post_id'
+          for (const row of cleanRows) {
             await client.query(insertQuery, [row.id, row.post_id, row.name, row.email, row.body]);
           }
 
-          await client.query('COMMIT'); // Save changes
-          
-          // Tell all connected frontends to refresh their tables
-          io.to('dashboard').emit('data_updated'); 
-          
-          return res.status(200).json({ status: 'success', message: 'Data imported successfully' });
-          
+          await client.query('COMMIT'); 
         } catch (insertError) {
-          await client.query('ROLLBACK'); // Undo everything if a single row fails
+          await client.query('ROLLBACK'); 
           console.error("Database Insert Error:", insertError);
           return res.status(500).json({ error: 'Failed to insert data into database' });
         } finally {
-          client.release(); // Return connection to the pool
+          client.release(); 
         }
+
+        // 2. Handle true conflicts if any exist
+        if (trueConflicts.length > 0) {
+          console.log(`Detected ${trueConflicts.length} data conflicts.`);
+
+          const uploaderSocketId = req.body.socketId;
+
+          if (uploaderSocketId) {
+            io.to(uploaderSocketId).emit('conflict_detected', {
+              existingData: existingRecords.filter(ex => trueConflicts.some(tc => tc.id == ex.id)),
+              incomingData: trueConflicts
+            });
+          } else {
+            io.to('dashboard').emit('conflict_detected', {
+              existingData: existingRecords.filter(ex => trueConflicts.some(tc => tc.id == ex.id)),
+              incomingData: trueConflicts
+            });
+          }
+
+          // Force the frontend to update so the user can see the clean rows behind the modal
+          if (cleanRows.length > 0) {
+            io.to('dashboard').emit('data_updated'); 
+          }
+
+          return res.status(202).json({ 
+            status: 'conflict', 
+            message: 'Conflicts detected. Awaiting user resolution.' 
+          });
+        }
+        
+        // 3. If NO conflicts at all, finish successfully
+        io.to('dashboard').emit('data_updated'); 
+        return res.status(200).json({ status: 'success', message: 'Data imported successfully' });
 
       } catch (error) {
         console.error("Outer Error:", error);
@@ -245,6 +231,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
+// Export decoupling for Jest Testing
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`Backend API running on port ${PORT}`);

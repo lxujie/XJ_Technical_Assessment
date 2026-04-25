@@ -1,39 +1,76 @@
-# Technical Assessment  
+# Real-Time Data Manager
 
-Complete the assessment in 3 days or otherwise stipulated. Do read the following details carefully and thoroughly for the requirements. If you have any queries on the assessment you may ask your interviewer for the contact. If you need time extension do request from your interviewer.
+A full-stack TypeScript application built with React, Node.js (Express), and PostgreSQL. This project features robust CSV processing, highly responsive search and pagination, and an event-driven architecture using WebSockets for real-time collaborative conflict resolution.
 
-## Problem Statement
+## Prerequisites
 
-Create a React/Svelte frontend in Typescript and NodeJS web backend in Typescript/Javascript with the following functionalities.  
+- **Docker** and **Docker Compose** must be installed and running on your machine.
 
-1. Upload a CSV file with appropriate feedback to the user on the upload progress. Data needs to be stored in a database.
+## Getting Started
 
-2. List the data uploaded with pagination.  
+1. Clone this repository and navigate to the root directory.
+2. Build and start the containers using Docker Compose:
 
-3. Search data from the uploaded file. The web application should be responsive while listing of data and searching of data.  
+```bash
+docker compose up --build
+```
 
-4. Proper handling and checks for the data uploaded.
+3. Once the containers are running, access the application:
 
-5. Real-time collaboration. The application must support two browser sessions simultaneously editing/searching the same dataset. When one user uploads a new CSV that overlaps with existing records (matching by a unique identifier in the data), the application must:
-   - Detect duplicate/conflicting records
-   - Display a real-time diff UI (without page refresh) showing what changed between the old and new data
-   - [Optional] User can be allowed to choose to which version of the data to keep. Tha updates should also be reflected in real-time(within 3 seconds).
+- Frontend UI: `http://localhost:5173`
+- Backend API: `http://localhost:3000`
 
-## Submission Requirement
+> Note: To completely wipe the database and start fresh, run `docker compose down -v` followed by `docker compose up --build`.
 
-In your submission, must include the following:  
+## Feature Demo Guide
 
-1. Use this [csv file](data.csv) as the sample  
+Included in the root directory are three test files:
 
-2. Include unit tests with complete test cases including edge cases.  
+- `data.csv` — the baseline
+- `conflict_data.csv` — modified records to trigger conflicts
+- `empty.csv` — to test edge cases
 
-3. Provide a git repository for us to assess your submission.  
+### Testing Real-Time Collaboration & Conflict Resolution
 
-4. Provide a docker compose file to run the necessary components for your application.
+To see the WebSocket architecture in action, follow these steps:
 
-5. Provide a readme in the git repository on how to setup and run the project.  
+1. Open two separate browser windows side-by-side (for example, two Chrome windows, or Chrome and Firefox) and navigate to `http://localhost:5173` in both.
+2. In Window A, upload the original `data.csv`. Both windows will instantly populate with the data.
+3. In Window A, upload `conflict_data.csv`.
+4. The backend will detect the data collision and fire a `conflict_detected` event only to Window A. A diff modal will appear showing the exact changes highlighted in red. Window B remains uninterrupted.
+5. In Window A, click **"Overwrite with New CSV"**.
+6. Watch Window B. The table will automatically update to reflect the new data in milliseconds without any manual page refresh.
 
-## Other notes
+## Architecture & Design Decisions
 
-- You will be expected to run and demo your application running the docker compose file during the interview.
-- During the demo, two browser tabs/windows should be opened and you will be required to perform the conflicting uploads simultaneously. You must explain every design decision in their conflict resolution strategy.
+This application was built with a focus on edge-case handling, data integrity, and scalable UX.
+
+1. Targeted WebSocket Emissions: When a user uploads a file, their unique `socket.id` is bundled with the HTTP POST request. This allows the server to isolate the Conflict Resolution UI to the specific user who caused the conflict, rather than broadcasting it globally and interrupting other active users.
+2. Smart Conflict Detection: Instead of blindly flagging an upload just because an ID already exists, the backend logic intelligently diffs the incoming CSV values against the existing PostgreSQL records. It only interrupts the user if the data was actually modified.
+3. ACID Compliant Transactions: The CSV upload pipeline wraps all database inserts in strict `BEGIN`, `COMMIT`, and `ROLLBACK` blocks. If a batch contains a malformed row that violates database constraints, the entire batch is rejected, completely preventing partial or corrupted data states.
+4. Aggressive Data Sanitization: The backend parser utilizes regex (`/[^a-zA-Z0-9]/g`) to aggressively strip out invisible Byte Order Marks (BOMs), erratic spaces, and literal quotes from incoming CSV headers, ensuring a bulletproof mapping to the database schema regardless of the export software used.
+5. Debounced Search: The React frontend utilizes a custom `useDebounce` hook (500ms). This protects the PostgreSQL database from being hammered by expensive `ILIKE` queries on every single keystroke while the user types.
+
+## Running Unit Tests
+
+The backend includes a Jest/Supertest suite designed to catch production edge cases (for example, negative pagination values, empty files, and SQL constraint rollback verification).
+
+To run the tests locally:
+
+1. Open a terminal and navigate to the backend folder:
+
+```bash
+cd backend
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Run the test suite:
+
+```bash
+npm test
+```
